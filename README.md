@@ -9,5 +9,5 @@ This repository contains a Python implementation of the model presented in the [
 
 ## Example
 
-We present some visual results compared to various other methods.
+We present some visual results compared to various other methods when sigma = 25.
 ![figure](results.png)
