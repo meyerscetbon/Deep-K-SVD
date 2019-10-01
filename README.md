@@ -10,4 +10,4 @@ This repository contains a Python implementation of the model presented in the [
 ## Example
 
 We present some visual results compared to various other methods.
-![figure](visual_results.jpg)
+![figure](results.jpg)
