@@ -7,3 +7,7 @@ This work considers noise removal from images, focusing on the well known K-SVD 
 
 This repository contains a Python implementation of the model presented in the [paper](https://arxiv.org/abs/1909.13164).
 
+## Example
+
+We present some visual results compared to various other methods.
+![figure](visual_results.jpg)
