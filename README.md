@@ -1,5 +1,5 @@
 # Deep K-SVD Denoising
-Code of the paper by Meyer Scetbon, Michael Elad and Payman Milanfar
+Code of the paper by Meyer Scetbon, Michael Elad and Peyman Milanfar
 
 ## Intro: A Differentiable version of the K-SVD Denoising algorithm
 
