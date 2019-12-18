@@ -7,7 +7,6 @@ import pickle
 import torch
 from torch.utils.data import DataLoader
 from torchvision import transforms
-import Deepnet_Denoising
 import Deep_KSVD
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -58,7 +57,7 @@ for e in file_test:
 mean = 255 / 2
 std = 255 / 2
 data_transform = transforms.Compose(
-    [Deepnet_Denoising.Normalize(mean=mean, std=std), Deepnet_Denoising.ToTensor()]
+    [Deep_KSVD.Normalize(mean=mean, std=std), Deep_KSVD.ToTensor()]
 )
 # Noise level:
 sigma = 25
