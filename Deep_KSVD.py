@@ -9,6 +9,7 @@ from skimage import io
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+from typing import List
 
 
 def order_F_to_C(n):
@@ -19,25 +20,25 @@ def order_F_to_C(n):
     return idx
 
 
-def Init_DCT(n, m):
+def init_dct(n, m):
     """ Compute the Overcomplete Discrete Cosinus Transform. """
-    Dictionary = np.zeros((n, m))
+    oc_dictionary = np.zeros((n, m))
     for k in range(m):
         V = np.cos(np.arange(0, n) * k * np.pi / m)
         if k > 0:
             V = V - np.mean(V)
-        Dictionary[:, k] = V / np.linalg.norm(V)
-    Dictionary = np.kron(Dictionary, Dictionary)
-    Dictionary = Dictionary.dot(np.diag(1 / np.sqrt(np.sum(Dictionary ** 2, axis=0))))
+        oc_dictionary[:, k] = V / np.linalg.norm(V)
+    oc_dictionary = np.kron(oc_dictionary, oc_dictionary)
+    oc_dictionary = oc_dictionary.dot(np.diag(1 / np.sqrt(np.sum(oc_dictionary ** 2, axis=0))))
     idx = np.arange(0, n ** 2)
     idx = idx.reshape(n, n, order="F")
     idx = idx.reshape(n ** 2, order="C")
-    Dictionary = Dictionary[idx, :]
-    Dictionary = torch.from_numpy(Dictionary).float()
-    return Dictionary
+    oc_dictionary = oc_dictionary[idx, :]
+    oc_dictionary = torch.from_numpy(oc_dictionary).float()
+    return oc_dictionary
 
 
-class mydataset_sub_images(Dataset):
+class SubImagesDataset(Dataset):
     def __init__(self, root_dir, image_names, sub_image_size, sigma, transform=None):
         """
         Args:
@@ -54,37 +55,31 @@ class mydataset_sub_images(Dataset):
         self.sigma = sigma
         self.image_names = image_names
 
-        dataset_list = []
-        for name in self.image_names:
-            np_im = io.imread(os.path.join(self.root_dir, name))
-            dataset_list.append(np_im)
+        self.dataset_list = [io.imread(os.path.join(self.root_dir, name)) for name in self.image_names]
 
-        w, h = np.shape(dataset_list[0])
+        w, h = np.shape(self.dataset_list[0])
         self.number_sub_images = int(
             (w - sub_image_size + 1) * (h - sub_image_size + 1)
         )
 
-        self.dataset_list = dataset_list
         self.number_images = len(self.image_names)
 
-    def extract_sub_image(self, x, n, k):
-        w, h = np.shape(x)
-        i = k // int(h - n + 1)
-        j = k % int(h - n + 1)
-        sub_image = x[i : i + n, j : j + n]
-        sub_image = sub_image.reshape(1, n, n)
+    @staticmethod
+    def extract_sub_image_from_image(image, sub_image_size, idx_sub_image):
+        w, h = np.shape(image)
+        w_idx, h_idx = np.unravel_index(idx_sub_image, (int(w - sub_image_size + 1), int(h - sub_image_size + 1)))
+        sub_image = image[w_idx: w_idx + sub_image_size, h_idx: h_idx + sub_image_size]
+        sub_image = sub_image.reshape(1, sub_image_size, sub_image_size)
         return sub_image
 
     def __len__(self):
         return self.number_images * self.number_sub_images
 
     def __getitem__(self, idx):
-
-        idx_im = idx // self.number_sub_images
-        idx_sub_image = idx % self.number_sub_images
+        idx_im, idx_sub_image = np.unravel_index(idx, (self.number_images, self.number_sub_images))
 
         image = self.dataset_list[idx_im]
-        sub_image = self.extract_sub_image(image, self.sub_image_size, idx_sub_image)
+        sub_image = self.extract_sub_image_from_image(image, self.sub_image_size, idx_sub_image)
 
         np.random.seed(idx)
         noise = np.random.randn(self.sub_image_size, self.sub_image_size)
@@ -98,8 +93,8 @@ class mydataset_sub_images(Dataset):
         return sub_image.float(), sub_image_noise.float()
 
 
-class mydataset_full_images(Dataset):
-    def __init__(self, root_dir, image_names, sigma, transform=None):
+class FullImagesDataset(Dataset):
+    def __init__(self, root_dir: str, image_names: List[str], sigma: float, transform=None):
         """
         Args:
             root_dir (string): Directory with all the images.
@@ -114,27 +109,23 @@ class mydataset_full_images(Dataset):
         self.sigma = sigma
         self.image_names = image_names
 
-        dataset_list = []
-        dataset_list_noise = []
-        for k, name in enumerate(self.image_names):
-            np_im = io.imread(os.path.join(self.root_dir, name))
-            dataset_list.append(np_im)
+        self.dataset_list = [io.imread(os.path.join(self.root_dir, name)) for name in self.image_names]
+        self.dataset_list_noise = [self._add_noise_to_image(np_im, k + 1e7) for (k, np_im) in
+                                   enumerate(self.dataset_list)]
 
-            w, h = np.shape(np_im)
-            np.random.seed(k + 10 ** 7)
-            noise = np.random.randn(w, h)
-            np_im_noise = np_im + self.sigma * noise
-            dataset_list_noise.append(np_im_noise)
-
-        self.dataset_list_noise = dataset_list_noise
-        self.dataset_list = dataset_list
         self.number_images = len(self.image_names)
+
+    def _add_noise_to_image(self, np_image, seed):
+        w, h = np.shape(np_image)
+        np.random.seed(seed)
+        noise = np.random.randn(w, h)
+        np_im_noise = np_image + self.sigma * noise
+        return np_im_noise
 
     def __len__(self):
         return self.number_images
 
     def __getitem__(self, idx):
-
         image = self.dataset_list[idx]
         w, h = np.shape(image)
         image = image.reshape(1, w, h)
@@ -167,22 +158,21 @@ class Normalize(object):
 
 class DenoisingNet_MLP(torch.nn.Module):
     def __init__(
-        self,
-        patch_size,
-        D_in,
-        H_1,
-        H_2,
-        H_3,
-        D_out_lam,
-        T,
-        min_v,
-        max_v,
-        Dict_init,
-        c_init,
-        w_init,
-        device,
+            self,
+            patch_size,
+            D_in,
+            H_1,
+            H_2,
+            H_3,
+            D_out_lam,
+            T,
+            min_v,
+            max_v,
+            Dict_init,
+            c_init,
+            w_init,
+            device,
     ):
-
         super(DenoisingNet_MLP, self).__init__()
         self.patch_size = patch_size
 
@@ -213,7 +203,6 @@ class DenoisingNet_MLP(torch.nn.Module):
         return torch.sign(x) * torch.max(torch.abs(x) - l, self.soft_comp)
 
     def forward(self, x):
-
         N, C, w, h = x.shape
 
         unfold = self.unfold(x)
@@ -261,21 +250,21 @@ class DenoisingNet_MLP(torch.nn.Module):
 
 class DenoisingNet_MLP_2(torch.nn.Module):
     def __init__(
-        self,
-        patch_size,
-        D_in,
-        H_1,
-        H_2,
-        H_3,
-        D_out_lam,
-        T,
-        min_v,
-        max_v,
-        Dict_init,
-        c_init,
-        w_1_init,
-        w_2_init,
-        device,
+            self,
+            patch_size,
+            D_in,
+            H_1,
+            H_2,
+            H_3,
+            D_out_lam,
+            T,
+            min_v,
+            max_v,
+            Dict_init,
+            c_init,
+            w_1_init,
+            w_2_init,
+            device,
     ):
 
         super(DenoisingNet_MLP_2, self).__init__()
@@ -405,22 +394,22 @@ class DenoisingNet_MLP_2(torch.nn.Module):
 
 class DenoisingNet_MLP_3(torch.nn.Module):
     def __init__(
-        self,
-        patch_size,
-        D_in,
-        H_1,
-        H_2,
-        H_3,
-        D_out_lam,
-        T,
-        min_v,
-        max_v,
-        Dict_init,
-        c,
-        w_1_init,
-        w_2_init,
-        w_3_init,
-        device,
+            self,
+            patch_size,
+            D_in,
+            H_1,
+            H_2,
+            H_3,
+            D_out_lam,
+            T,
+            min_v,
+            max_v,
+            Dict_init,
+            c,
+            w_1_init,
+            w_2_init,
+            w_3_init,
+            device,
     ):
 
         super(DenoisingNet_MLP_3, self).__init__()

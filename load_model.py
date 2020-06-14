@@ -14,7 +14,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # Overcomplete Discrete Cosinus Transform:
 patch_size = 8
 m = 16
-Dict_init = Deep_KSVD.Init_DCT(patch_size, m)
+Dict_init = Deep_KSVD.init_dct(patch_size, m)
 Dict_init = Dict_init.to(device)
 
 # Squared Spectral norm:
@@ -27,7 +27,7 @@ w_init = torch.normal(mean=1, std=1 / 10 * torch.ones(patch_size ** 2)).float()
 w_init = w_init.to(device)
 
 # Deep-KSVD:
-D_in, H_1, H_2, H_3, D_out_lam, T, min_v, max_v = 64, 128, 64, 32, 1, 7, -1, 1
+D_in, H_1, H_2, H_3, D_out_lam, T, min_v, max_v = patch_size ** 2, 128, 64, 32, 1, 7, -1, 1
 model = Deep_KSVD.DenoisingNet_MLP(
     patch_size,
     D_in,
@@ -63,7 +63,7 @@ data_transform = transforms.Compose(
 sigma = 25
 
 # Test Dataset:
-my_Data_test = Deep_KSVD.mydataset_full_images(
+my_Data_test = Deep_KSVD.FullImagesDataset(
     root_dir="gray", image_names=onlyfiles_test, sigma=sigma, transform=data_transform
 )
 

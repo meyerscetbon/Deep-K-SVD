@@ -32,7 +32,7 @@ sigma = 25
 # Sub Image Size:
 sub_image_size = 128
 # Training Dataset:
-my_Data_train = Deep_KSVD.mydataset_sub_images(
+my_Data_train = Deep_KSVD.SubImagesDataset(
     root_dir="gray",
     image_names=onlyfiles_train,
     sub_image_size=sub_image_size,
@@ -40,7 +40,7 @@ my_Data_train = Deep_KSVD.mydataset_sub_images(
     transform=data_transform,
 )
 # Test Dataset:
-my_Data_test = Deep_KSVD.mydataset_full_images(
+my_Data_test = Deep_KSVD.FullImagesDataset(
     root_dir="gray", image_names=onlyfiles_test, sigma=sigma, transform=data_transform
 )
 
@@ -67,17 +67,17 @@ file_to_print.flush()
 # Initialization:
 patch_size = 8
 m = 16
-Dict_init = Deep_KSVD.Init_DCT(patch_size, m)
+Dict_init = Deep_KSVD.init_dct(patch_size, m)
 Dict_init = Dict_init.to(device)
 
-c_init = linalg.norm(Dict_init, ord=2) ** 2
+c_init = (linalg.norm(Dict_init.cpu(), ord=2)) ** 2
 c_init = torch.FloatTensor((c_init,))
 c_init = c_init.to(device)
 
 w_init = torch.normal(mean=1, std=1 / 10 * torch.ones(patch_size ** 2)).float()
 w_init = w_init.to(device)
 
-D_in, H_1, H_2, H_3, D_out_lam, T, min_v, max_v = 64, 128, 64, 32, 1, 5, -1, 1
+D_in, H_1, H_2, H_3, D_out_lam, T, min_v, max_v = patch_size ** 2, 128, 64, 32, 1, 5, -1, 1
 model = Deep_KSVD.DenoisingNet_MLP(
     patch_size,
     D_in,
